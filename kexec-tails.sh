@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+set -x
 
 if ! which aria2c ; then
   printf "warn: 'aria2c' is recommended" >2; exit -1
@@ -15,22 +16,24 @@ fi
 # fetch upstream info
 index="https://tails.boum.org/install/v2/Tails/amd64/stable/latest.json"
 ver="$(curl --silent "${index}" | jq -r ".installations[0].version")"
-fname="tails-amd64-${ver}.img"
+fname="tails-amd64-${ver}.iso"
 
 # temp workdir
 OUTDIR="$(mktemp -d "/tmp/ktails.XXXXXX")";
 trap "rm -rf ${OUTDIR}" EXIT
-img="${OUTDIR}/${fname}"
 
 # outputs
-mkdir -p "${HOME}/.cache/ktails/"
-KERNEL="${HOME}/.cache/ktails/${fname}.vmlinuz"
-INITRD="${HOME}/.cache/ktails/${fname}.initrd.gz"
+CACHE="${KTAILS_CACHE:-"${HOME}/.cache/ktails"}"
+img="${CACHE}/${fname}"
+mkdir -p "${CACHE}"
+KERNEL="${CACHE}/${fname}.vmlinuz"
+INITRD="${CACHE}/${fname}.initrd.gz"
 
 function acquire_img() {
   if which aria2c ; then
     aria2c --dir="${OUTDIR}" --seed-time=0 \
       "https://tails.boum.org/torrents/files/${fname}.torrent"
+    bash
     mv "${OUTDIR}/tails-amd64-${ver}-img/${fname}" "${img}"
   else
     wget -O "${img}" \
@@ -73,4 +76,6 @@ CMDLINE="${CMDLINE} mce=0 vsyscall=none union=aufs"
 CMDLINE="${CMDLINE} live-media=/ toram"
 
 sudo kexec --load --initrd "${INITRD}" --command-line "${CMDLINE}" "${KERNEL}"
+sync && sudo sync
+read -p "Press enter to continue"
 sudo kexec --reset-vga --exec
